@@ -1,0 +1,76 @@
+name: docker-build
+
+# Reusable workflow: build an app image and push it to GHCR.
+# On pull_request  -> build only (validate the Dockerfile builds), do NOT push.
+# On push to main  -> build AND push  ghcr.io/<repo>:sha-<short>  (+ latest).
+# On git tag vX.Y.Z -> also push       ghcr.io/<repo>:X.Y.Z
+#
+# App repos call it with ~10 lines — see this repo's README.
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: "Image name without registry (defaults to the calling repo, e.g. usagiy/my-app)"
+        type: string
+        default: ""
+      dockerfile:
+        description: "Path to the Dockerfile"
+        type: string
+        default: "./Dockerfile"
+      context:
+        description: "Build context"
+        type: string
+        default: "."
+      test-command:
+        description: "Optional shell command to run before building (e.g. 'npm ci && npm test'). Empty = skip."
+        type: string
+        default: ""
+      push-latest:
+        description: "Also move the :latest tag on pushes to the default branch"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: Log in to GHCR
+        # Only needed when we actually push (skip on PRs).
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags & labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ inputs.image-name != '' && inputs.image-name || github.repository }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ inputs.push-latest && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+      - name: Build (and push on non-PR)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
