@@ -26,6 +26,29 @@ jobs:
     #   context: .
     #   test-command: "npm ci && npm test"
     #   push-latest: true
+    #   cache-scope: my-app   # defaults to image-name
+```
+
+### Several images from one repo
+
+Call the workflow once per image, each with its own `image-name` (lowercase —
+GHCR rejects uppercase) and `dockerfile`. Each image gets its own build cache
+automatically (scoped by `image-name`), so parallel builds don't evict each other:
+
+```yaml
+jobs:
+  api:
+    uses: usagiy/github-workflows/.github/workflows/docker-build.yml@main
+    permissions: { contents: read, packages: write }
+    with:
+      image-name: usagiy/my-app-api
+      dockerfile: ./server/Dockerfile
+  web:
+    uses: usagiy/github-workflows/.github/workflows/docker-build.yml@main
+    permissions: { contents: read, packages: write }
+    with:
+      image-name: usagiy/my-app-web
+      dockerfile: ./web/Dockerfile
 ```
 
 ### Behaviour

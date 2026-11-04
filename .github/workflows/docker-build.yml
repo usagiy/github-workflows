@@ -30,6 +30,10 @@ on:
         description: "Also move the :latest tag on pushes to the default branch"
         type: boolean
         default: true
+      cache-scope:
+        description: "GitHub Actions build-cache scope. Defaults to the image name, so a repo that builds several images keeps a separate cache per image."
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -72,5 +76,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ inputs.cache-scope || inputs.image-name || github.repository }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope || inputs.image-name || github.repository }}
